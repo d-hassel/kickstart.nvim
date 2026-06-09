@@ -99,7 +99,7 @@ do
   vim.g.maplocalleader = ' '
 
   -- Set to true if you have a Nerd Font installed and selected in the terminal
-  vim.g.have_nerd_font = false
+  vim.g.have_nerd_font = true
 
   -- [[ Setting options ]]
   --  See `:help vim.o`
@@ -110,7 +110,7 @@ do
   vim.o.number = true
   -- You can also add relative line numbers, to help with jumping.
   --  Experiment for yourself to see if you like it!
-  -- vim.o.relativenumber = true
+  vim.o.relativenumber = true
 
   -- Enable mouse mode, can be useful for resizing splits for example!
   vim.o.mouse = 'a'
@@ -171,6 +171,17 @@ do
   -- instead raise a dialog asking if you wish to save the current file(s)
   -- See `:help 'confirm'`
   vim.o.confirm = true
+
+  vim.filetype.add {
+    extension = {
+      gotmpl = 'gotmpl',
+    },
+    pattern = {
+      ['.*/templates/.*%.tpl'] = 'helm',
+      ['.*/templates/.*%.ya?ml'] = 'helm',
+      ['helmfile.*%.ya?ml'] = 'helm',
+    },
+  }
 
   -- [[ Basic Keymaps ]]
   --  See `:help vim.keymap.set()`
@@ -234,6 +245,9 @@ do
   -- vim.keymap.set("n", "<C-S-j>", "<C-w>J", { desc = "Move window to the lower" })
   -- vim.keymap.set("n", "<C-S-k>", "<C-w>K", { desc = "Move window to the upper" })
 
+  vim.keymap.set('n', '<C-s>', "<cmd>%!yq eval 'sort_keys(..)' -<CR>", { desc = 'Sort with yq' })
+  vim.keymap.set('v', '<C-s>', "<cmd>'<,'>!yq eval 'sort_keys(..)' -<CR>", { desc = 'Sort with yq' })
+
   -- [[ Basic Autocommands ]]
   --  See `:help lua-guide-autocommands`
 
@@ -290,22 +304,25 @@ do
   -- See `:help vim.pack-events`
   vim.api.nvim_create_autocmd('PackChanged', {
     callback = function(ev)
-      local name = ev.data.spec.name
-      local kind = ev.data.kind
+      local data = ev.data or {}
+      local spec = data.spec or {}
+      local name = spec.name
+      local kind = data.kind
+      if not name then return end
       if kind ~= 'install' and kind ~= 'update' then return end
 
       if name == 'telescope-fzf-native.nvim' and vim.fn.executable 'make' == 1 then
-        run_build(name, { 'make' }, ev.data.path)
+        run_build(name, { 'make' }, data.path)
         return
       end
 
       if name == 'LuaSnip' then
-        if vim.fn.has 'win32' ~= 1 and vim.fn.executable 'make' == 1 then run_build(name, { 'make', 'install_jsregexp' }, ev.data.path) end
+        if vim.fn.has 'win32' ~= 1 and vim.fn.executable 'make' == 1 then run_build(name, { 'make', 'install_jsregexp' }, data.path) end
         return
       end
 
       if name == 'nvim-treesitter' then
-        if not ev.data.active then vim.cmd.packadd 'nvim-treesitter' end
+        if not data.active then vim.cmd.packadd 'nvim-treesitter' end
         vim.cmd 'TSUpdate'
         return
       end
@@ -362,6 +379,19 @@ do
     },
   }
 
+  vim.pack.add {
+    gh 'sindrets/diffview.nvim',
+    gh 'f-person/git-blame.nvim',
+    { src = gh 'akinsho/git-conflict.nvim', version = 'v2.1.0' },
+  }
+  require('gitblame').setup {
+    enabled = true,
+    message_template = ' <summary> • <date> • <author> • <<sha>>',
+    date_format = '%m-%d-%Y %H:%M:%S',
+    virtual_text_column = 1,
+  }
+  require('git-conflict').setup {}
+
   -- Useful plugin to show you pending keybinds.
   vim.pack.add { gh 'folke/which-key.nvim' }
   require('which-key').setup {
@@ -378,23 +408,13 @@ do
   }
 
   -- [[ Colorscheme ]]
-  -- You can easily change to a different colorscheme.
-  -- Change the name of the colorscheme plugin below, and then
-  -- change the command under that to load whatever the name of that colorscheme is.
-  --
-  -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-  vim.pack.add { gh 'folke/tokyonight.nvim' }
-  ---@diagnostic disable-next-line: missing-fields
-  require('tokyonight').setup {
+  vim.pack.add { gh 'nuvic/flexoki-nvim' }
+  require('flexoki').setup {
     styles = {
-      comments = { italic = false }, -- Disable italics in comments
+      bold = false,
     },
   }
-
-  -- Load the colorscheme here.
-  -- Like many other themes, this one has different styles, and you could load
-  -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-  vim.cmd.colorscheme 'tokyonight-night'
+  vim.cmd.colorscheme 'flexoki'
 
   -- Highlight todo, notes, etc in comments
   vim.pack.add { gh 'folke/todo-comments.nvim' }
@@ -493,7 +513,11 @@ do
     --     i = { ['<c-enter>'] = 'to_fuzzy_refine' },
     --   },
     -- },
-    -- pickers = {}
+    pickers = {
+      find_files = {
+        hidden = true,
+      },
+    },
     extensions = {
       ['ui-select'] = { require('telescope.themes').get_dropdown() },
     },
@@ -698,6 +722,15 @@ do
     -- ts_ls = {},
 
     stylua = {}, -- Used to format Lua code
+    helm_ls = {
+      settings = {
+        ['helm-ls'] = {
+          yamlls = {
+            path = '/opt/homebrew/Cellar/helm-ls/0.4.1/bin/helm_ls',
+          },
+        },
+      },
+    },
 
     -- Special Lua Config, as recommended by neovim help docs
     lua_ls = {
@@ -739,6 +772,7 @@ do
     gh 'mason-org/mason.nvim',
     gh 'mason-org/mason-lspconfig.nvim',
     gh 'WhoIsSethDaniel/mason-tool-installer.nvim',
+    gh 'qvalentin/helm-ls.nvim',
   }
 
   -- Automatically install LSPs and related tools to stdpath for Neovim
@@ -898,7 +932,23 @@ do
   vim.pack.add { { src = gh 'nvim-treesitter/nvim-treesitter', version = 'main' } }
 
   -- Ensure basic parsers are installed
-  local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+  local parsers = {
+    'bash',
+    'c',
+    'diff',
+    'gotmpl',
+    'helm',
+    'html',
+    'lua',
+    'luadoc',
+    'markdown',
+    'markdown_inline',
+    'sql',
+    'query',
+    'vim',
+    'vimdoc',
+    'yaml',
+  }
   require('nvim-treesitter').install(parsers)
 
   ---@param buf integer
@@ -961,11 +1011,11 @@ do
   --  Uncomment any of the lines below to enable them (you will need to restart nvim).
   --
   -- require 'kickstart.plugins.debug'
-  -- require 'kickstart.plugins.indent_line'
-  -- require 'kickstart.plugins.lint'
+  require 'kickstart.plugins.indent_line'
+  require 'kickstart.plugins.lint'
   -- require 'kickstart.plugins.autopairs'
-  -- require 'kickstart.plugins.neo-tree'
-  -- require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
+  require 'kickstart.plugins.neo-tree'
+  require 'kickstart.plugins.gitsigns' -- adds gitsigns recommended keymaps
 
   -- NOTE: You can add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --
